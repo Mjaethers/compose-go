@@ -371,7 +371,7 @@ func TestProjectFromURL(t *testing.T) {
 	urlOverrideFile, err := url.JoinPath(svr.URL, "compose-with-overrides.yaml")
 	assert.NilError(t, err)
 
-	t.Run("from multiple urls", func(t *testing.T) {
+	t.Run("from remote files", func(t *testing.T) {
 		// project from compose files served by server
 		optsUrl, err := NewProjectOptions([]string{
 			urlBaseFile, urlOverrideFile,
@@ -396,7 +396,7 @@ func TestProjectFromURL(t *testing.T) {
 		assert.DeepEqual(t, pUrl, pFile)
 	})
 
-	t.Run("from one url", func(t *testing.T) {
+	t.Run("from remote base", func(t *testing.T) {
 		// project from remote base file and local override file
 		optsUrl, err := NewProjectOptions([]string{
 			urlBaseFile,
@@ -414,6 +414,30 @@ func TestProjectFromURL(t *testing.T) {
 			"testdata/simple/compose-with-overrides.yaml",
 		}, WithName("my_project"),
 			WithWorkingDirectory(wd)) // if base compose file is url then project working dir should be the current working dir
+		assert.NilError(t, err)
+		pFile, err := ProjectFromOptions(optsFile)
+		assert.NilError(t, err)
+		pFile.ComposeFiles = pUrl.ComposeFiles // override compose file names
+
+		assert.DeepEqual(t, pUrl, pFile)
+	})
+
+	t.Run("from remote override", func(t *testing.T) {
+		// project from local base file and remote override file
+		optsUrl, err := NewProjectOptions([]string{
+			"testdata/simple/compose.yaml",
+			urlOverrideFile,
+		}, WithName("my_project"))
+		assert.NilError(t, err)
+		pUrl, err := ProjectFromOptions(optsUrl)
+		assert.NilError(t, err)
+
+		// project from local compose files
+		assert.NilError(t, err)
+		optsFile, err := NewProjectOptions([]string{
+			"testdata/simple/compose.yaml",
+			"testdata/simple/compose-with-overrides.yaml",
+		}, WithName("my_project"))
 		assert.NilError(t, err)
 		pFile, err := ProjectFromOptions(optsFile)
 		assert.NilError(t, err)
