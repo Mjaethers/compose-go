@@ -213,7 +213,7 @@ func TestProjectFromSetOfFiles(t *testing.T) {
 	assert.Equal(t, service.Image, "haproxy")
 }
 
-func TestProjectComposefilesFromSetOfFiles(t *testing.T) {
+func TestProjectComposeFilesFromSetOfFiles(t *testing.T) {
 	opts, err := NewProjectOptions([]string{},
 		WithWorkingDirectory("testdata/simple/"),
 		WithName("my_project"),
@@ -226,7 +226,7 @@ func TestProjectComposefilesFromSetOfFiles(t *testing.T) {
 	assert.DeepEqual(t, p.ComposeFiles, []string{absPath})
 }
 
-func TestProjectComposefilesFromWorkingDir(t *testing.T) {
+func TestProjectComposeFilesFromWorkingDir(t *testing.T) {
 	opts, err := NewProjectOptions([]string{
 		"testdata/simple/compose.yaml",
 		"testdata/simple/compose-with-overrides.yaml",
