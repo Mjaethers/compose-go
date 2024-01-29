@@ -18,6 +18,9 @@ package cli
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -351,4 +354,45 @@ func TestEnvVariablePrecedence(t *testing.T) {
 			assert.DeepEqual(t, test.expected, options.Environment)
 		})
 	}
+}
+
+// TestProjectFromURL tests if a project create with remote compose files is the same as one create with local files
+func TestProjectFromURL(t *testing.T) {
+	// serve compose files
+	svr := httptest.NewServer(http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			prefix := filepath.Join("testdata", "simple")
+			http.ServeFile(w, r, prefix+r.URL.Path)
+		}))
+	defer svr.Close()
+
+	t.Run("from multiple urls", func(t *testing.T) {
+		urlBaseFile, err := url.JoinPath(svr.URL, "compose.yaml")
+		assert.NilError(t, err)
+		urlOverrideFile, err := url.JoinPath(svr.URL, "compose-with-overrides.yaml")
+		assert.NilError(t, err)
+
+		// project from compose files served by server
+		optsUrl, err := NewProjectOptions([]string{
+			urlBaseFile, urlOverrideFile,
+		}, WithName("my_project"))
+		assert.NilError(t, err)
+		pUrl, err := ProjectFromOptions(optsUrl)
+		assert.NilError(t, err)
+
+		// project from local compose files
+		wd, err := os.Getwd()
+		assert.NilError(t, err)
+		optsFile, err := NewProjectOptions([]string{
+			"testdata/simple/compose.yaml",
+			"testdata/simple/compose-with-overrides.yaml",
+		}, WithName("my_project"),
+			WithWorkingDirectory(wd)) // if base compose file is url then project working dir should be the current working dir
+		assert.NilError(t, err)
+		pFile, err := ProjectFromOptions(optsFile)
+		assert.NilError(t, err)
+		pFile.ComposeFiles = pUrl.ComposeFiles // override compose file names
+
+		assert.DeepEqual(t, pUrl, pFile)
+	})
 }
