@@ -385,38 +385,44 @@ func (o ProjectOptions) GetWorkingDir() (string, error) {
 
 // ProjectFromOptions load a compose project based on command line options
 func ProjectFromOptions(options *ProjectOptions) (*types.Project, error) {
-	filePaths, remotePaths, err := getConfigPathsFromOptions(options)
+	optionPaths, err := getConfigPathsFromOptions(options)
 	if err != nil {
 		return nil, err
 	}
 
-	var configs []types.ConfigFile
-	for _, f := range filePaths {
-		var b []byte
-		if f == "-" {
-			b, err = io.ReadAll(os.Stdin)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			b, err = os.ReadFile(f)
-			if err != nil {
-				return nil, err
-			}
+	// if base file is url set working dir
+	if !optionPaths[0].isFile {
+		wd, err := os.Getwd()
+		if err == nil {
+			options.WorkingDir = wd
 		}
-		configs = append(configs, types.ConfigFile{
-			Filename: f,
-			Content:  b,
-		})
 	}
 
-	for _, r := range remotePaths {
-		b, err := readFromUrl(r)
-		if err != nil {
-			return nil, err
+	var configs []types.ConfigFile
+	var composeFiles []string
+	for _, o := range optionPaths {
+		composeFiles = append(composeFiles, o.path)
+		var b []byte
+		if o.isFile {
+			if o.path == "-" {
+				b, err = io.ReadAll(os.Stdin)
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				b, err = os.ReadFile(o.path)
+				if err != nil {
+					return nil, err
+				}
+			}
+		} else {
+			b, err = readFromUrl(o.path)
+			if err != nil {
+				return nil, err
+			}
 		}
 		configs = append(configs, types.ConfigFile{
-			Filename: r,
+			Filename: o.path,
 			Content:  b,
 		})
 	}
@@ -448,7 +454,7 @@ func ProjectFromOptions(options *ProjectOptions) (*types.Project, error) {
 		return nil, err
 	}
 
-	project.ComposeFiles = append(filePaths, remotePaths...)
+	project.ComposeFiles = composeFiles
 	return project, nil
 }
 
@@ -475,42 +481,36 @@ func withConvertWindowsPaths(options *ProjectOptions) func(*loader.Options) {
 	}
 }
 
+type configPath struct {
+	path   string
+	isFile bool
+}
+
 // getConfigPathsFromOptions retrieves the config files for project based on project options
-func getConfigPathsFromOptions(options *ProjectOptions) (paths []string, urls []string, err error) {
+func getConfigPathsFromOptions(options *ProjectOptions) ([]configPath, error) {
 	if len(options.ConfigPaths) == 0 {
-		return nil, nil, fmt.Errorf("no configuration file provided: %w", errdefs.ErrNotFound)
+		return nil, fmt.Errorf("no configuration file provided: %w", errdefs.ErrNotFound)
 	}
+	var paths []configPath
 	for _, f := range options.ConfigPaths {
 		if f == "-" {
-			paths = append(paths, f)
+			paths = append(paths, configPath{f, true})
 			continue
 		}
 		abs, err := filepath.Abs(f)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		if _, err := os.Stat(f); err != nil {
 			if validUrl(f) {
-				if options.WorkingDir == "" {
-					wd, err := os.Getwd()
-					if err == nil {
-						options.WorkingDir = wd
-					}
-				}
-				urls = append(urls, f)
+				paths = append(paths, configPath{f, false})
 				continue
 			}
-			return nil, nil, err
+			return nil, err
 		}
-		if options.WorkingDir == "" {
-			options.WorkingDir = filepath.Dir(abs)
-		}
-		paths = append(paths, abs)
+		paths = append(paths, configPath{abs, true})
 	}
-	if options.WorkingDir == "" {
-		options.WorkingDir, err = os.Getwd()
-	}
-	return paths, urls, err
+	return paths, nil
 }
 
 func findFiles(names []string, pwd string) []string {
