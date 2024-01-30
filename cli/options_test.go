@@ -18,6 +18,7 @@ package cli
 
 import (
 	"fmt"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -362,13 +363,21 @@ func TestProjectFromURL(t *testing.T) {
 	svr := httptest.NewServer(http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			prefix := filepath.Join("testdata", "simple")
-			http.ServeFile(w, r, prefix+r.URL.Path)
+			filePath := prefix + r.URL.Path
+			if _, err := os.Stat(filePath); err != nil {
+				fmt.Println("here")
+				http.NotFound(w, r)
+				return
+			}
+			http.ServeFile(w, r, filePath)
 		}))
 	defer svr.Close()
 
 	urlBaseFile, err := url.JoinPath(svr.URL, "compose.yaml")
 	assert.NilError(t, err)
 	urlOverrideFile, err := url.JoinPath(svr.URL, "compose-with-overrides.yaml")
+	assert.NilError(t, err)
+	urlDoesNotExist, err := url.JoinPath(svr.URL, "compose-missing-file,yaml")
 	assert.NilError(t, err)
 
 	t.Run("from remote files", func(t *testing.T) {
@@ -444,5 +453,14 @@ func TestProjectFromURL(t *testing.T) {
 		pFile.ComposeFiles = pUrl.ComposeFiles // override compose file names
 
 		assert.DeepEqual(t, pUrl, pFile)
+	})
+
+	t.Run("from bad url", func(t *testing.T) {
+		optsUrl, err := NewProjectOptions([]string{
+			urlDoesNotExist,
+		}, WithName("my_project"))
+		assert.NilError(t, err)
+		_, err = ProjectFromOptions(optsUrl)
+		assert.ErrorType(t, err, err.(*fs.PathError))
 	})
 }
